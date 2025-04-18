@@ -20,7 +20,7 @@ public class TelnetService {
             telnet.connect(server, 23);
 
             InputStream in = telnet.getInputStream();
-            PrintStream out = new PrintStream(telnet.getOutputStream(), true, StandardCharsets.UTF_8.name());
+            PrintStream out = new PrintStream(telnet.getOutputStream(), true, StandardCharsets.UTF_8);
 
             login(in, out, user, password);
             String result = sendCommand(in, out, command);
