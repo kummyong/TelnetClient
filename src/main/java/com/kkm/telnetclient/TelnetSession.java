@@ -1,10 +1,14 @@
 package com.kkm.telnetclient;
 
 import org.apache.commons.net.telnet.TelnetClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.*;
 
 public class TelnetSession {
+
+    private static final Logger log = LoggerFactory.getLogger(TelnetSession.class);
 
     private TelnetClient telnetClient;
     private BufferedReader reader;
@@ -25,62 +29,60 @@ public class TelnetSession {
     }
 
     public void connect() throws IOException {
+        log.info("Connecting to {}:{}", host, port);
         telnetClient = new TelnetClient();
         telnetClient.connect(host, port);
+        log.info("Connected to server.");
 
         reader = new BufferedReader(new InputStreamReader(telnetClient.getInputStream()));
         writer = new PrintWriter(telnetClient.getOutputStream(), true);
 
-        waitFor("login:");
+        waitUntil("login:");
+        log.debug("Sending username: {}", username);
         writer.println(username);
 
-        waitFor("Password:");
+        waitUntil("Password:");
+        log.debug("Sending password.");
         writer.println(password);
 
-        waitFor(prompt);  // 로그인 완료 후 프롬프트까지 대기
+        waitUntil(prompt);
+        log.info("Login successful, prompt detected: {}", prompt);
     }
 
     public String execute(String command) throws IOException {
+        log.info("Executing command: {}", command);
         writer.println(command);
-        return waitFor(prompt);  // 프롬프트 전까지 명령 결과 반환
+        String result = waitUntil(prompt);
+        log.debug("Command result: \n{}", result);
+        return result;
     }
 
     public void disconnect() throws IOException {
         if (telnetClient != null && telnetClient.isConnected()) {
+            log.info("Disconnecting from server.");
             telnetClient.disconnect();
         }
     }
 
-    private String waitFor(String endPattern) throws IOException {
+    private String waitUntil(String endPattern) throws IOException {
         StringBuilder sb = new StringBuilder();
-        char[] buffer = new char[1];
+        long timeoutMillis = 10000;
         long startTime = System.currentTimeMillis();
-        long timeoutMillis = 10000;  // 10초 타임아웃
 
-        while (System.currentTimeMillis() - startTime < timeoutMillis) {
-            if (reader.ready()) {
-                int read = reader.read(buffer);
-                if (read == -1) break;
-
-                sb.append(buffer[0]);
-                if (sb.toString().contains(endPattern)) {
-                    break;
-                }
-            } else {
-                try {
-                    Thread.sleep(50);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new IOException("Interrupted while waiting for pattern", e);
-                }
+        int ch;
+        while ((System.currentTimeMillis() - startTime) < timeoutMillis && (ch = reader.read()) != -1) {
+            sb.append((char) ch);
+            if (sb.toString().contains(endPattern)) {
+                break;
             }
         }
 
         if (!sb.toString().contains(endPattern)) {
+            log.warn("Timeout waiting for pattern: {}", endPattern);
             throw new IOException("Timeout while waiting for: " + endPattern);
         }
 
+        log.trace("Matched pattern [{}] in response:\n{}", endPattern, sb);
         return sb.toString();
     }
 }
-
